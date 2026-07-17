@@ -24,6 +24,20 @@ def test_context_calculates_daily_trend_momentum_and_volatility_features() -> No
     assert context.atr_14 == 1.0
     assert context.distance_from_20d_high == 0.0
     assert context.average_volume_20 == 100.0
+    assert context.latest_volume == 100.0
+    assert context.volume_ratio == 1.0
+
+
+def test_context_calculates_latest_volume_relative_to_the_20_day_average() -> None:
+    closes = list(range(1, 221))
+    volumes = [100] * 219 + [200]
+    context = build_technical_context(
+        pd.DataFrame({"Close": closes, "High": closes, "Low": closes, "Volume": volumes})
+    )
+
+    assert context.latest_volume == 200.0
+    assert context.average_volume_20 == 105.0
+    assert round(context.volume_ratio, 4) == round(200 / 105, 4)
 
 
 def test_context_rejects_insufficient_daily_history() -> None:

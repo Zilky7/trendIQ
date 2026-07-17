@@ -21,6 +21,8 @@ def build_technical_context(bars: pd.DataFrame) -> TechnicalContext:
     low = bars["Low"].astype(float)
     latest = float(close.iloc[-1])
     high_20 = float(high.tail(20).max())
+    average_volume_20 = float(bars["Volume"].tail(20).mean())
+    latest_volume = float(bars["Volume"].iloc[-1])
 
     return TechnicalContext(
         close=latest,
@@ -34,5 +36,7 @@ def build_technical_context(bars: pd.DataFrame) -> TechnicalContext:
             4,
         ),
         distance_from_20d_high=round((latest / high_20 - 1) * 100, 2),
-        average_volume_20=float(bars["Volume"].tail(20).mean()),
+        average_volume_20=average_volume_20,
+        latest_volume=latest_volume,
+        volume_ratio=latest_volume / average_volume_20 if average_volume_20 > 0 else 0.0,
     )

@@ -10,3 +10,5 @@ class TechnicalContext:
     atr_14: float
     distance_from_20d_high: float
     average_volume_20: float
+    latest_volume: float
+    volume_ratio: float
