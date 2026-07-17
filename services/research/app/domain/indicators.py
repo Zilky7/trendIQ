@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 from ta.momentum import RSIIndicator
 from ta.volatility import AverageTrueRange
@@ -8,6 +9,12 @@ from .models import TechnicalContext
 def build_technical_context(bars: pd.DataFrame) -> TechnicalContext:
     if len(bars) < 200:
         raise ValueError("at least 200 daily bars are required")
+
+    required_bars = bars[["Close", "High", "Low", "Volume"]].tail(200).astype(float)
+    if not np.isfinite(required_bars.to_numpy()).all() or (required_bars["High"] <= 0).any():
+        raise ValueError(
+            "required trailing OHLCV values must be finite and high values must be positive"
+        )
 
     close = bars["Close"].astype(float)
     high = bars["High"].astype(float)

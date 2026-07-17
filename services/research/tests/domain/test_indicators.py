@@ -1,4 +1,5 @@
 import pandas as pd
+import pytest
 
 from app.domain.indicators import build_technical_context
 
@@ -41,3 +42,40 @@ def test_context_rejects_insufficient_daily_history() -> None:
         assert str(error) == "at least 200 daily bars are required"
     else:
         raise AssertionError("expected insufficient-history error")
+
+
+@pytest.mark.parametrize("column", ["Close", "High"])
+def test_context_rejects_missing_latest_ohlcv_values(column: str) -> None:
+    frame = pd.DataFrame(
+        {
+            "Close": list(range(1, 201)),
+            "High": list(range(1, 201)),
+            "Low": list(range(1, 201)),
+            "Volume": [100] * 200,
+        }
+    )
+    frame.loc[frame.index[-1], column] = float("nan")
+
+    with pytest.raises(
+        ValueError,
+        match="required trailing OHLCV values must be finite and high values must be positive",
+    ):
+        build_technical_context(frame)
+
+
+def test_context_rejects_nonpositive_high_in_20_day_window() -> None:
+    frame = pd.DataFrame(
+        {
+            "Close": list(range(1, 201)),
+            "High": list(range(1, 201)),
+            "Low": list(range(1, 201)),
+            "Volume": [100] * 200,
+        }
+    )
+    frame.loc[frame.index[-1], "High"] = 0
+
+    with pytest.raises(
+        ValueError,
+        match="required trailing OHLCV values must be finite and high values must be positive",
+    ):
+        build_technical_context(frame)
