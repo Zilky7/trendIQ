@@ -40,6 +40,40 @@ def test_attribution_with_no_valid_evidence_is_fully_unexplained() -> None:
     ]
 
 
+def test_maximum_strength_event_explains_half_of_the_move() -> None:
+    event = EventEvidence(
+        kind="earnings",
+        occurred_on="2024-05-22",
+        title="Earnings release",
+        url="https://example.com/e",
+        proximity=1.0,
+        repeatability=1.0,
+        peer_confirmation=1.0,
+    )
+
+    results = score_attributions([event])
+
+    assert results[0].weight == 50.0
+    assert results[-1].weight == 50.0
+
+
+def test_multiple_strong_events_cap_explained_share_at_eighty_five_percent() -> None:
+    event = EventEvidence(
+        kind="earnings",
+        occurred_on="2024-05-22",
+        title="Earnings release",
+        url="https://example.com/e",
+        proximity=1.0,
+        repeatability=1.0,
+        peer_confirmation=1.0,
+    )
+
+    results = score_attributions([event, event])
+
+    assert sum(item.weight for item in results[:-1]) == 85.0
+    assert results[-1].weight == 15.0
+
+
 def test_news_without_timestamp_and_url_is_not_used_as_evidence() -> None:
     rumor = EventEvidence(
         kind="news",

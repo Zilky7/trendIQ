@@ -5,10 +5,11 @@ from dataclasses import dataclass
 from .events import EventEvidence, valid_evidence
 
 
-# Attribution is explanatory rather than proven causality.  This floor makes
-# that uncertainty explicit even when every supplied evidence signal is strong.
-MIN_UNEXPLAINED_SHARE = 0.10
-MAX_EXPLAINED_SHARE = 1.0 - MIN_UNEXPLAINED_SHARE
+# The research specification maps one unit of independently corroborated
+# support to 50 explanatory percentage points.  The calibration caps all
+# evidence at 85%, retaining at least 15% for causes not represented in data.
+EXPLAINED_PERCENT_PER_SUPPORT_POINT = 50.0
+MAX_EXPLAINED_PERCENT = 85.0
 PERCENT = 100.0
 
 
@@ -25,18 +26,21 @@ def score_attributions(events: list[EventEvidence]) -> list[Attribution]:
 
     Each input factor is constrained to its evidence scale of zero through one.
     Their product is the event's deterministic support score.  The aggregate
-    support determines explained coverage, while each event receives its
-    proportional portion of that coverage.
+    support is converted to explained coverage using the frozen research
+    calibration, while each event receives its proportional portion.
     """
     supported = [event for event in events if valid_evidence(event)]
     raw_scores = [_support_score(event) for event in supported]
     total_support = sum(raw_scores)
-    explained_share = min(total_support, MAX_EXPLAINED_SHARE)
+    explained_percent = min(
+        MAX_EXPLAINED_PERCENT,
+        total_support * EXPLAINED_PERCENT_PER_SUPPORT_POINT,
+    )
 
     if total_support == 0:
         return [_unexplained(PERCENT)]
 
-    weights = [PERCENT * explained_share * score / total_support for score in raw_scores]
+    weights = [explained_percent * score / total_support for score in raw_scores]
     attributions = [
         Attribution(
             kind=event.kind,
