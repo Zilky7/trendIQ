@@ -1,0 +1,1 @@
+"""TrendIQ research service package."""

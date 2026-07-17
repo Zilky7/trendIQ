@@ -1,0 +1,11 @@
+[project]
+name = "trendiq-research"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["fastapi", "uvicorn[standard]", "pandas", "yfinance", "ta", "httpx", "pydantic-settings"]
+
+[dependency-groups]
+dev = ["pytest", "pytest-asyncio", "respx", "ruff"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
