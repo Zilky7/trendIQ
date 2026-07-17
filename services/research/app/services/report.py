@@ -172,6 +172,9 @@ def _ai_facts(report: Mapping[str, Any]) -> dict[str, Any]:
         "technical_context": report["technical_context"],
         "event_coverage": report["event_coverage"],
         "attributions": report["attributions"],
+        "summary": report["summary"],
+        "reasoning_steps": report["reasoning_steps"],
+        "risks": report["risks"],
         "execution_plan": report["execution_plan"],
         "disclaimer": report["disclaimer"],
     }

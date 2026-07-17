@@ -110,6 +110,24 @@ def test_ai_prose_with_unsupplied_facts_is_rejected_for_rule_fallback() -> None:
     assert result["summary"] == "规则分析"
 
 
+def test_compliant_ai_response_echoing_supplied_report_facts_is_accepted() -> None:
+    from app.services.report import _ai_facts, _merge_ai_explanation
+
+    report = _rule_report()
+    facts = _ai_facts(report)
+    result = _merge_ai_explanation(
+        report,
+        {
+            "summary": facts["summary"],
+            "reasoning_steps": facts["reasoning_steps"],
+            "risks": facts["risks"],
+            "execution_plan": facts["execution_plan"],
+        },
+    )
+
+    assert result["report_source"] == "ai"
+
+
 def test_research_run_route_persists_a_version(monkeypatch, tmp_path) -> None:
     from app.main import app
 
@@ -168,5 +186,18 @@ def test_ai_timeout_or_error_returns_none_for_rule_fallback(monkeypatch) -> None
     monkeypatch.setenv("AI_BASE_URL", "https://ai.example/v1")
     monkeypatch.setenv("AI_API_KEY", "configured")
     monkeypatch.setenv("AI_MODEL", "gpt-5.6-terra")
+
+    assert AIClient(transport=httpx.MockTransport(handler)).generate({"close": 100}) is None
+
+
+def test_ai_http_success_without_completion_content_returns_rule_fallback(monkeypatch) -> None:
+    from app.providers.ai import AIClient
+
+    monkeypatch.setenv("AI_BASE_URL", "https://ai.example/v1")
+    monkeypatch.setenv("AI_API_KEY", "configured")
+    monkeypatch.setenv("AI_MODEL", "gpt-5.6-terra")
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"choices": []})
 
     assert AIClient(transport=httpx.MockTransport(handler)).generate({"close": 100}) is None

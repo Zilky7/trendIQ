@@ -61,5 +61,5 @@ class AIClient:
             content = response.json()["choices"][0]["message"]["content"]
             parsed = json.loads(content)
             return parsed if isinstance(parsed, dict) else None
-        except (httpx.HTTPError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+        except (httpx.HTTPError, IndexError, KeyError, TypeError, ValueError, json.JSONDecodeError):
             return None
