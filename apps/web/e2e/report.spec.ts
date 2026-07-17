@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
-const reportFixture = {
-  symbol: "MU",
+const initialReportFixture = {
+  symbol: "NVDA",
   model_version: "research-v1",
   report_source: "rules",
   source_label: "deterministic E2E fixture",
@@ -11,7 +11,7 @@ const reportFixture = {
     { kind: "unexplained", weight: 40, confidence: "medium", evidence: null },
   ],
   technical_context: { close: 100, sma_50: 95, sma_200: 90, rsi_14: 61.2, atr_14: 3.2, distance_from_20d_high: -1.5, average_volume_20: 1000000, latest_volume: 1200000, volume_ratio: 1.2 },
-  summary: "偏多，等待回踩确认",
+  summary: "初始 NVDA 报告",
   reasoning_steps: ["价格高于 50 日和 200 日均线。"],
   risks: ["财报前请控制风险。"],
   execution_plan: { side: "long", entry: 99, stop_loss: 96, take_profit_1: 105, take_profit_2: 110, take_profit_3: 115, invalidation: "收盘跌破 $96.00" },
@@ -22,15 +22,29 @@ const reportFixture = {
   ],
 };
 
+const submittedMuReportFixture = {
+  ...initialReportFixture,
+  symbol: "MU",
+  source_label: "deterministic submitted MU fixture",
+  summary: "MU 提交后报告",
+};
+
 test("MU research report renders deterministic evidence in a fixed chart/report workspace", async ({ page }) => {
+  let reportRequests = 0;
   await page.route("**/api/reports/**", async (route) => {
-    await route.fulfill({ contentType: "application/json", body: JSON.stringify(reportFixture) });
+    const fixture = reportRequests++ === 0 ? initialReportFixture : submittedMuReportFixture;
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify(fixture) });
   });
 
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "MU · 偏多，等待回踩确认" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "NVDA · 初始 NVDA 报告" })).toBeVisible();
   await page.getByLabel("股票代码").fill("MU");
+  const submittedRequest = page.waitForRequest((request) => new URL(request.url()).pathname === "/api/reports/MU");
   await page.getByRole("button", { name: "分析图表" }).click();
+  await submittedRequest;
+
+  await expect(page.getByRole("heading", { name: "MU · MU 提交后报告" })).toBeVisible();
+  expect(reportRequests).toBe(2);
 
   await expect(page.getByLabel("price chart")).toBeVisible();
   await expect(page.getByText("RSI(14)")).toBeVisible();
