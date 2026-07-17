@@ -17,7 +17,7 @@ from app.domain.models import TechnicalContext
 from app.domain.strategy import StrategyFeatures, determine_signal
 from app.providers.ai import AIClient
 from app.providers.events import EarningsSecEventProvider, MacroEventProvider
-from app.providers.market_data import YFinanceMarketDataProvider
+from app.providers.market_data import NasdaqHistoricalDataProvider, YFinanceMarketDataProvider
 
 
 DISCLAIMER = "仅供研究参考，不构成投资建议"
@@ -36,7 +36,7 @@ def validate_symbol(symbol: str) -> str:
 def build_symbol_report(
     symbol: str,
     *,
-    market_data: YFinanceMarketDataProvider | None = None,
+    market_data: YFinanceMarketDataProvider | NasdaqHistoricalDataProvider | None = None,
     ai_client: AIClient | None = None,
     today: date | None = None,
 ) -> dict[str, Any]:
@@ -47,7 +47,9 @@ def build_symbol_report(
     # claiming that yfinance is a real-time or authoritative source.
     start = (report_date - timedelta(days=3 * 365)).isoformat()
     end = (report_date + timedelta(days=1)).isoformat()
-    bars_result = (market_data or YFinanceMarketDataProvider()).daily_bars(normalized_symbol, start, end)
+    bars_result = (market_data or NasdaqHistoricalDataProvider()).daily_bars(
+        normalized_symbol, start, end
+    )
     context = build_technical_context(bars_result.bars)
     chart_bars = _build_chart_bars(bars_result.bars)
     coverages = _event_coverages(start, end)

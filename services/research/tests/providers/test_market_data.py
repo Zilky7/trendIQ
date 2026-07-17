@@ -1,6 +1,7 @@
 import pandas as pd
+import pytest
 
-from app.providers.market_data import YFinanceMarketDataProvider
+from app.providers.market_data import NasdaqHistoricalDataProvider, YFinanceMarketDataProvider
 from app.services.bar_cache import BarCache
 
 
@@ -114,3 +115,46 @@ def test_provider_trims_fresh_download_before_returning_and_caching(tmp_path) ->
     expected_dates = pd.to_datetime(["2024-01-02", "2024-01-03", "2024-01-04"]).tolist()
     assert result.bars.index.tolist() == expected_dates
     assert cached.index.tolist() == expected_dates
+
+
+def test_nasdaq_provider_normalizes_reverse_order_daily_rows_and_marks_fallback_source(
+    tmp_path,
+) -> None:
+    seen: dict[str, object] = {}
+
+    def get_json(url: str, params: dict[str, str]) -> dict[str, object]:
+        seen["url"] = url
+        seen["params"] = params
+        return {
+            "data": {
+                "tradesTable": {
+                    "rows": [
+                        {"date": "01/03/2025", "open": "$102.00", "high": "$104.00", "low": "$101.00", "close": "$103.00", "volume": "1,200"},
+                        {"date": "01/02/2025", "open": "$100.00", "high": "$103.00", "low": "$99.00", "close": "$102.00", "volume": "1,000"},
+                    ]
+                }
+            }
+        }
+
+    provider = NasdaqHistoricalDataProvider(get_json=get_json, cache=BarCache(cache_dir=tmp_path))
+    result = provider.daily_bars("mu", "2025-01-01", "2025-01-04")
+
+    assert seen["params"] == {
+        "assetclass": "stocks",
+        "fromdate": "2025-01-01",
+        "todate": "2025-01-04",
+        "limit": "5000",
+    }
+    assert result.source_label == "Nasdaq historical daily fallback data (unadjusted)"
+    assert result.bars.index.tolist() == pd.to_datetime(["2025-01-02", "2025-01-03"]).tolist()
+    assert result.bars.iloc[-1].Close == 103.0
+
+
+def test_nasdaq_provider_rejects_an_empty_or_malformed_response(tmp_path) -> None:
+    provider = NasdaqHistoricalDataProvider(
+        get_json=lambda *_: {"data": {"tradesTable": {"rows": []}}},
+        cache=BarCache(cache_dir=tmp_path),
+    )
+
+    with pytest.raises(ValueError, match="no daily bars returned for MU"):
+        provider.daily_bars("MU", "2025-01-01", "2025-01-04")
