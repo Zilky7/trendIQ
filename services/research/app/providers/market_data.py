@@ -44,7 +44,7 @@ class YFinanceMarketDataProvider:
             auto_adjust=True,
             progress=False,
         )
-        bars = _normalize_daily_bars(raw)
+        bars = _bars_in_requested_interval(_normalize_daily_bars(raw), start, end)
         if bars.empty:
             raise ValueError(f"no daily bars returned for {normalized_symbol}")
 

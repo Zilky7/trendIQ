@@ -89,3 +89,28 @@ def test_provider_trims_a_covering_cached_interval_to_the_requested_dates(tmp_pa
     result = provider.daily_bars("MU", "2024-01-03", "2024-01-09")
 
     assert result.bars.index.tolist() == pd.to_datetime(["2024-01-03", "2024-01-08"]).tolist()
+
+
+def test_provider_trims_fresh_download_before_returning_and_caching(tmp_path) -> None:
+    raw = pd.DataFrame(
+        {
+            "Open": [10.0, 11.0, 12.0, 13.0, 14.0],
+            "High": [11.0, 12.0, 13.0, 14.0, 15.0],
+            "Low": [9.0, 10.0, 11.0, 12.0, 13.0],
+            "Close": [10.5, 11.5, 12.5, 13.5, 14.5],
+            "Volume": [50, 51, 52, 53, 54],
+        },
+        index=pd.to_datetime(
+            ["2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04", "2024-01-05"]
+        ),
+    )
+    provider = YFinanceMarketDataProvider(
+        download=lambda **_: raw, cache=BarCache(cache_dir=tmp_path)
+    )
+
+    result = provider.daily_bars("MU", "2024-01-02", "2024-01-05")
+    cached = pd.read_parquet(tmp_path / "MU__2024-01-02__2024-01-05.parquet")
+
+    expected_dates = pd.to_datetime(["2024-01-02", "2024-01-03", "2024-01-04"]).tolist()
+    assert result.bars.index.tolist() == expected_dates
+    assert cached.index.tolist() == expected_dates
