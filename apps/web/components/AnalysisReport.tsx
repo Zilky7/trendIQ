@@ -23,10 +23,11 @@ function Metrics({ context }: { context: TechnicalContext }) {
 
 function AttributionRow({ attribution }: { attribution: Attribution }) {
   const evidence = attribution.evidence;
+  const isUnexplained = attribution.kind === "unexplained";
   return <div className="attribution">
-    <strong>{attribution.kind}</strong>
-    <div className="muted">影响权重 {Math.round(attribution.weight * 100)}% · 置信度 {attribution.confidence}</div>
-    {evidence ? <div><a className="evidence-link" href={evidence.url} target="_blank" rel="noreferrer">{evidence.title}</a><div className="muted">{evidence.occurred_on}</div></div> : <div className="muted">无可链接的事件证据</div>}
+    <strong>{isUnexplained ? "未解释部分" : attribution.kind}</strong>
+    <div className="muted">影响权重 {number(attribution.weight)}% · 置信度 {attribution.confidence}</div>
+    {isUnexplained ? <div className="muted">未被当前事件覆盖解释，不能据此推断新闻原因。</div> : evidence ? <div><a className="evidence-link" href={evidence.url} target="_blank" rel="noreferrer">{evidence.title}</a><div className="muted">{evidence.occurred_on}</div></div> : <div className="muted">无可链接的事件证据</div>}
   </div>;
 }
 

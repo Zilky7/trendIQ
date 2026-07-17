@@ -66,7 +66,10 @@ it("never renders an AI credential even when a report is displayed", async () =>
         report_source: "rules",
         source_label: "Yahoo Finance",
         event_coverage: [],
-        attributions: [],
+        attributions: [
+          { kind: "earnings", weight: 85, confidence: "high", evidence: { kind: "earnings", occurred_on: "2025-01-02", title: "Earnings release", url: "https://example.test/earnings" } },
+          { kind: "unexplained", weight: 15, confidence: "low", evidence: null },
+        ],
         technical_context: {
           close: 100,
           sma_50: 90,
@@ -103,5 +106,10 @@ it("never renders an AI credential even when a report is displayed", async () =>
 
   await waitFor(() => expect(screen.getByRole("heading", { name: /测试摘要/ })).toBeVisible());
   expect(screen.getByText("支撑 $94.00 · 压力 $108.00")).toBeVisible();
+  expect(screen.getByText("影响权重 85% · 置信度 high")).toBeVisible();
+  expect(screen.getByText("未解释部分")).toBeVisible();
+  expect(screen.getByText("影响权重 15% · 置信度 low")).toBeVisible();
+  expect(screen.getByText("未被当前事件覆盖解释，不能据此推断新闻原因。")).toBeVisible();
+  expect(screen.queryByText(/5000%|8500%|1500%/)).not.toBeInTheDocument();
   expect(screen.queryByText("should-not-render")).not.toBeInTheDocument();
 });
