@@ -57,3 +57,20 @@ def test_store_refuses_to_overwrite_an_existing_research_version(tmp_path) -> No
 
     with pytest.raises(ValueError, match="research version already exists: v1"):
         store.save(replacement)
+
+
+def test_store_rejects_nonserializable_content_without_creating_a_version_file(tmp_path) -> None:
+    store = ResearchRunStore(tmp_path)
+    run = ResearchRun(
+        version="invalid",
+        universe=("MU",),
+        window=ResearchWindow(),
+        parameters={"unsupported": {"set values are not JSON"}},
+        development_metrics={},
+        validation_metrics={},
+    )
+
+    with pytest.raises(TypeError):
+        store.save(run)
+
+    assert not (tmp_path / "invalid.json").exists()

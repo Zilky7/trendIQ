@@ -2,8 +2,10 @@
 
 from dataclasses import asdict, dataclass
 import json
+import os
 from pathlib import Path
 import re
+import tempfile
 from typing import Mapping
 
 from app.domain.strategy import ResearchWindow
@@ -43,14 +45,32 @@ class ResearchRunStore:
         if not _VERSION_NAME.fullmatch(run.version):
             raise ValueError("research version must be a simple file name")
 
+        serialized_record = json.dumps(run.to_record(), indent=2, sort_keys=True) + "\n"
         self._runs_directory.mkdir(parents=True, exist_ok=True)
         path = self._runs_directory / f"{run.version}.json"
-        try:
-            with path.open("x", encoding="utf-8") as record_file:
-                json.dump(run.to_record(), record_file, indent=2, sort_keys=True)
-                record_file.write("\n")
-        except FileExistsError as error:
-            raise ValueError(f"research version already exists: {run.version}") from error
 
-        path.chmod(0o444)
+        temporary_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=self._runs_directory,
+                prefix=f".{run.version}.",
+                suffix=".tmp",
+                delete=False,
+            ) as temporary_file:
+                temporary_path = Path(temporary_file.name)
+                temporary_file.write(serialized_record)
+                temporary_file.flush()
+                os.fsync(temporary_file.fileno())
+
+            temporary_path.chmod(0o444)
+            try:
+                os.link(temporary_path, path)
+            except FileExistsError as error:
+                raise ValueError(f"research version already exists: {run.version}") from error
+        finally:
+            if temporary_path is not None:
+                temporary_path.unlink(missing_ok=True)
+
         return path
