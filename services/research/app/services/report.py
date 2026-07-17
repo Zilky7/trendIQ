@@ -44,7 +44,7 @@ def build_symbol_report(
     normalized_symbol = validate_symbol(symbol)
     report_date = today or date.today()
     # Three years gives ample history for the required 200-day context without
-    # claiming that yfinance is a real-time or authoritative source.
+    # claiming that the configured daily-data provider is real-time or authoritative.
     start = (report_date - timedelta(days=3 * 365)).isoformat()
     end = (report_date + timedelta(days=1)).isoformat()
     bars_result = (market_data or NasdaqHistoricalDataProvider()).daily_bars(
