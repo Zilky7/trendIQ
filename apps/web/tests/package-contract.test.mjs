@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { readFile } from "node:fs/promises";
 import { expect, test } from "vitest";
 
