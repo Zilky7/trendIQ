@@ -43,7 +43,7 @@ export function AnalysisWorkspace({ initialSymbol }: { initialSymbol: string }) 
   return <main className="h-screen overflow-hidden">
     <header className="topbar"><strong>TrendIQ Research</strong><form className="symbol-form" onSubmit={submit}><label htmlFor="symbol">股票代码</label><input id="symbol" className="symbol-input" value={symbol} onChange={(event) => setSymbol(event.target.value.toUpperCase())} /><button className="primary-button" type="submit" disabled={loading}>{loading ? "分析中" : "分析图表"}</button></form></header>
     <div className="workspace">
-      <section aria-label="price chart" className="chart-panel min-h-0"><p className="eyebrow">{activeSymbol} · 日线 K 线 / 成交量 / SMA50 / SMA200</p><PriceChart symbol={activeSymbol} bars={report?.chart_bars} support={report?.execution_plan.stop_loss} resistance={report?.execution_plan.take_profit_1} /></section>
+      <section aria-label="price chart" className="chart-panel min-h-0 overflow-hidden"><p className="eyebrow">{activeSymbol} · 日线 K 线 / 成交量 / SMA50 / SMA200</p><PriceChart symbol={activeSymbol} bars={report?.chart_bars} support={report?.execution_plan.stop_loss} resistance={report?.execution_plan.take_profit_1} /></section>
       <aside aria-label="analysis report" className="report-panel min-h-0 overflow-y-auto"><AnalysisReport report={report} loading={loading} error={error} /></aside>
     </div>
   </main>;
