@@ -23,6 +23,28 @@ def _rule_report(symbol: str = "MU") -> dict[str, object]:
             "latest_volume": 11,
             "volume_ratio": 1.1,
         },
+        "chart_bars": [
+            {
+                "date": "2025-01-02",
+                "open": 98.0,
+                "high": 101.0,
+                "low": 97.0,
+                "close": 100.0,
+                "volume": 1_000_000.0,
+                "sma_50": 95.0,
+                "sma_200": 90.0,
+            },
+            {
+                "date": "2025-01-03",
+                "open": 100.0,
+                "high": 102.0,
+                "low": 99.0,
+                "close": 101.0,
+                "volume": 1_100_000.0,
+                "sma_50": 95.2,
+                "sma_200": 90.1,
+            },
+        ],
         "summary": "规则分析",
         "reasoning_steps": ["仅使用已提供技术事实"],
         "risks": ["未解释部分仍然存在"],
@@ -62,6 +84,56 @@ def test_report_route_returns_rule_fallback_without_secret(monkeypatch) -> None:
     assert payload["attributions"][-1]["kind"] == "unexplained"
     assert "AI_API_KEY" not in json.dumps(payload)
     assert "not-a-response-secret" not in json.dumps(payload)
+
+
+def test_report_route_returns_bounded_chronological_chart_bars(monkeypatch) -> None:
+    from app.main import app
+
+    monkeypatch.setattr("app.main.build_symbol_report", lambda symbol: _rule_report(symbol))
+
+    response = TestClient(app).get("/api/reports/MU")
+
+    assert response.status_code == 200
+    bars = response.json()["chart_bars"]
+    assert 1 <= len(bars) <= 260
+    assert [bar["date"] for bar in bars] == sorted(bar["date"] for bar in bars)
+    assert all(
+        bar["low"] <= min(bar["open"], bar["close"])
+        and bar["high"] >= max(bar["open"], bar["close"])
+        and bar["volume"] >= 0
+        for bar in bars
+    )
+    assert bars[-1]["sma_50"] == 95.2
+    assert bars[-1]["sma_200"] == 90.1
+
+
+def test_report_route_rejects_nonfinite_or_out_of_order_chart_bars(monkeypatch) -> None:
+    from app.main import app
+
+    report = _rule_report()
+    report["chart_bars"] = [
+        {**report["chart_bars"][0], "close": float("nan")},
+        report["chart_bars"][0],
+    ]
+    monkeypatch.setattr("app.main.build_symbol_report", lambda _: report)
+
+    response = TestClient(app).get("/api/reports/MU")
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == "unable to build report from configured research providers"
+
+
+def test_report_route_rejects_out_of_order_chart_bars(monkeypatch) -> None:
+    from app.main import app
+
+    report = _rule_report()
+    report["chart_bars"] = list(reversed(report["chart_bars"]))
+    monkeypatch.setattr("app.main.build_symbol_report", lambda _: report)
+
+    response = TestClient(app).get("/api/reports/MU")
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == "unable to build report from configured research providers"
 
 
 def test_invalid_symbol_maps_to_bad_request(monkeypatch) -> None:
@@ -147,6 +219,24 @@ def test_research_run_route_persists_a_version(monkeypatch, tmp_path) -> None:
     assert response.status_code == 201
     assert response.json()["version"] == "research-v1"
     assert (tmp_path / "research-v1.json").exists()
+
+
+def test_research_run_does_not_fetch_chart_or_report_data(monkeypatch, tmp_path) -> None:
+    from app.main import app
+
+    monkeypatch.setattr("app.main.ResearchRunStore", lambda _: __import__("app.services.research_run", fromlist=["ResearchRunStore"]).ResearchRunStore(tmp_path))
+    monkeypatch.setattr(
+        "app.main.build_symbol_report",
+        lambda _: (_ for _ in ()).throw(AssertionError("research runs must not fetch report data")),
+    )
+
+    response = TestClient(app).post(
+        "/api/research-runs",
+        json={"version": "research-v2", "universe": ["MU"]},
+    )
+
+    assert response.status_code == 201
+    assert response.json()["window"]["validation_end"] == "2025-12-31"
 
 
 def test_ai_client_uses_configured_model_and_chat_completions_request(monkeypatch) -> None:

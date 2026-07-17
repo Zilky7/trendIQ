@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from datetime import date
 from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, field_validator, model_validator
 
 from app.domain.strategy import ResearchWindow
 from app.services.report import build_symbol_report, validate_symbol
@@ -54,6 +55,23 @@ class TechnicalContextResponse(BaseModel):
     volume_ratio: float
 
 
+class ChartBarResponse(BaseModel):
+    date: date
+    open: FiniteFloat
+    high: FiniteFloat
+    low: FiniteFloat
+    close: FiniteFloat
+    volume: FiniteFloat = Field(ge=0)
+    sma_50: FiniteFloat | None
+    sma_200: FiniteFloat | None
+
+    @model_validator(mode="after")
+    def price_bounds_are_valid(self) -> "ChartBarResponse":
+        if self.low > min(self.open, self.close) or self.high < max(self.open, self.close):
+            raise ValueError("chart bar OHLC prices are inconsistent")
+        return self
+
+
 class ExecutionPlanResponse(BaseModel):
     side: Literal["long", "neutral"]
     entry: float | None
@@ -74,11 +92,24 @@ class ReportResponse(BaseModel):
     event_coverage: list[EventCoverageResponse]
     attributions: list[AttributionResponse]
     technical_context: TechnicalContextResponse
+    chart_bars: list[ChartBarResponse]
     summary: str
     reasoning_steps: list[str]
     risks: list[str]
     execution_plan: ExecutionPlanResponse
     disclaimer: str
+
+    @field_validator("chart_bars")
+    @classmethod
+    def chart_bars_are_bounded_and_strictly_chronological(
+        cls, chart_bars: list[ChartBarResponse]
+    ) -> list[ChartBarResponse]:
+        if not 1 <= len(chart_bars) <= 260:
+            raise ValueError("chart_bars must contain between 1 and 260 bars")
+        dates = [bar.date for bar in chart_bars]
+        if any(current >= following for current, following in zip(dates, dates[1:], strict=False)):
+            raise ValueError("chart_bars dates must be strictly chronological")
+        return chart_bars
 
 
 class ResearchRunRequest(BaseModel):

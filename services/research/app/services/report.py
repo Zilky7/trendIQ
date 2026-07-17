@@ -7,6 +7,9 @@ from datetime import date, timedelta
 import re
 from typing import Any, Mapping
 
+import numpy as np
+import pandas as pd
+
 from app.domain.attribution import Attribution, score_attributions
 from app.domain.events import EventCoverage
 from app.domain.indicators import build_technical_context
@@ -20,6 +23,7 @@ from app.providers.market_data import YFinanceMarketDataProvider
 DISCLAIMER = "仅供研究参考，不构成投资建议"
 MODEL_VERSION = "research-v1"
 _SYMBOL = re.compile(r"^[A-Z0-9.-]{1,10}$")
+_CHART_BAR_LIMIT = 260
 
 
 def validate_symbol(symbol: str) -> str:
@@ -45,6 +49,7 @@ def build_symbol_report(
     end = (report_date + timedelta(days=1)).isoformat()
     bars_result = (market_data or YFinanceMarketDataProvider()).daily_bars(normalized_symbol, start, end)
     context = build_technical_context(bars_result.bars)
+    chart_bars = _build_chart_bars(bars_result.bars)
     coverages = _event_coverages(start, end)
     attributions = score_attributions(
         [event for coverage in coverages for event in coverage.events]
@@ -52,6 +57,7 @@ def build_symbol_report(
     rules_report = _rules_report(
         normalized_symbol,
         context=context,
+        chart_bars=chart_bars,
         source_label=bars_result.source_label,
         coverages=coverages,
         attributions=attributions,
@@ -71,6 +77,7 @@ def _rules_report(
     symbol: str,
     *,
     context: TechnicalContext,
+    chart_bars: list[dict[str, Any]],
     source_label: str,
     coverages: tuple[EventCoverage, ...],
     attributions: list[Attribution],
@@ -94,12 +101,56 @@ def _rules_report(
         "event_coverage": [_coverage_record(item) for item in coverages],
         "attributions": [_attribution_record(item) for item in attributions],
         "technical_context": asdict(context),
+        "chart_bars": chart_bars,
         "summary": _rule_summary(context, signal.side),
         "reasoning_steps": _reasoning_steps(context, signal.reason),
         "risks": _risks(context, coverages),
         "execution_plan": execution_plan,
         "disclaimer": DISCLAIMER,
     }
+
+
+def _build_chart_bars(bars: pd.DataFrame) -> list[dict[str, Any]]:
+    """Serialize a bounded, validated slice of the same bars used for analysis."""
+    required = ["Open", "High", "Low", "Close", "Volume"]
+    if not isinstance(bars.index, pd.DatetimeIndex) or not bars.index.is_monotonic_increasing:
+        raise ValueError("chart bars require strictly chronological dates")
+    if bars.index.has_duplicates:
+        raise ValueError("chart bars require strictly chronological dates")
+
+    values = bars.loc[:, required].astype(float)
+    if not np.isfinite(values.to_numpy()).all():
+        raise ValueError("chart bars require finite OHLCV values")
+    if (
+        (values["Volume"] < 0).any()
+        or (values["Low"] > values[["Open", "Close"]].min(axis=1)).any()
+        or (values["High"] < values[["Open", "Close"]].max(axis=1)).any()
+        or (values["Low"] > values["High"]).any()
+    ):
+        raise ValueError("chart bars require finite OHLCV values with valid price bounds")
+
+    sma_50 = values["Close"].rolling(50).mean()
+    sma_200 = values["Close"].rolling(200).mean()
+    chart_frame = values.assign(sma_50=sma_50, sma_200=sma_200).tail(_CHART_BAR_LIMIT)
+    chart_bars: list[dict[str, Any]] = []
+    for timestamp, row in chart_frame.iterrows():
+        chart_bars.append(
+            {
+                "date": timestamp.date().isoformat(),
+                "open": float(row["Open"]),
+                "high": float(row["High"]),
+                "low": float(row["Low"]),
+                "close": float(row["Close"]),
+                "volume": float(row["Volume"]),
+                "sma_50": _finite_or_none(row["sma_50"]),
+                "sma_200": _finite_or_none(row["sma_200"]),
+            }
+        )
+    return chart_bars
+
+
+def _finite_or_none(value: float) -> float | None:
+    return float(value) if np.isfinite(value) else None
 
 
 def _execution_plan(context: TechnicalContext, side: str) -> dict[str, Any]:
