@@ -1,0 +1,70 @@
+import pandas as pd
+
+from app.providers.market_data import YFinanceMarketDataProvider
+from app.services.bar_cache import BarCache
+
+
+SOURCE_LABEL = "yfinance historical prototype data"
+
+
+def raw_daily_bars() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "Open": [10.0],
+            "High": [12.0],
+            "Low": [9.0],
+            "Close": [11.0],
+            "Volume": [50],
+        },
+        index=pd.to_datetime(["2024-01-02"]),
+    )
+
+
+def test_provider_normalizes_adjusted_daily_ohlcv_and_marks_yfinance_source(tmp_path) -> None:
+    provider = YFinanceMarketDataProvider(
+        download=lambda **_: raw_daily_bars(), cache=BarCache(cache_dir=tmp_path)
+    )
+
+    result = provider.daily_bars("mu", "2024-01-01", "2024-01-03")
+
+    assert result.symbol == "MU"
+    assert result.source_label == SOURCE_LABEL
+    assert result.bars.columns.tolist() == ["Open", "High", "Low", "Close", "Volume"]
+    assert result.bars.iloc[0].Close == 11.0
+
+
+def test_provider_normalizes_single_symbol_yfinance_multiindex_columns(tmp_path) -> None:
+    raw = raw_daily_bars()
+    raw.columns = pd.MultiIndex.from_product([raw.columns, ["MU"]])
+    provider = YFinanceMarketDataProvider(
+        download=lambda **_: raw, cache=BarCache(cache_dir=tmp_path)
+    )
+
+    result = provider.daily_bars("MU", "2024-01-01", "2024-01-03")
+
+    assert result.bars.columns.tolist() == ["Open", "High", "Low", "Close", "Volume"]
+    assert result.bars.iloc[0].Close == 11.0
+
+
+def test_provider_reuses_only_a_cache_interval_that_fully_covers_request(tmp_path) -> None:
+    calls = []
+
+    def download(**kwargs):
+        calls.append(kwargs)
+        return raw_daily_bars()
+
+    provider = YFinanceMarketDataProvider(
+        download=download, cache=BarCache(cache_dir=tmp_path)
+    )
+
+    provider.daily_bars("MU", "2024-01-02", "2024-01-10")
+    cached = provider.daily_bars("MU", "2024-01-03", "2024-01-09")
+    provider.daily_bars("MU", "2024-01-01", "2024-01-11")
+
+    assert len(calls) == 2
+    assert cached.source_label == SOURCE_LABEL
+    pd.testing.assert_frame_equal(cached.bars, raw_daily_bars())
+    assert sorted(path.name for path in tmp_path.glob("*.parquet")) == [
+        "MU__2024-01-01__2024-01-11.parquet",
+        "MU__2024-01-02__2024-01-10.parquet",
+    ]
