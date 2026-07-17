@@ -31,7 +31,10 @@ class YFinanceMarketDataProvider:
         normalized_symbol = symbol.upper()
         cached = self.cache.get(normalized_symbol, start, end)
         if cached is not None:
-            return BarResult(symbol=normalized_symbol, bars=cached)
+            bars = _bars_in_requested_interval(cached, start, end)
+            if bars.empty:
+                raise ValueError(f"no daily bars returned for {normalized_symbol}")
+            return BarResult(symbol=normalized_symbol, bars=bars)
 
         raw = self.download(
             tickers=normalized_symbol,
@@ -71,3 +74,9 @@ def _price_columns_from_multiindex(columns: pd.MultiIndex) -> pd.Index:
         if required.issubset(set(titled)):
             return titled
     raise ValueError("daily bars multi-index is missing a price-column level")
+
+
+def _bars_in_requested_interval(bars: pd.DataFrame, start: str, end: str) -> pd.DataFrame:
+    start_timestamp = pd.Timestamp(start)
+    end_timestamp = pd.Timestamp(end)
+    return bars.loc[(bars.index >= start_timestamp) & (bars.index < end_timestamp)].copy()
