@@ -4,7 +4,8 @@ import pandas as pd
 import pytest
 
 from app.providers.market_data import BarResult
-from app.services.report import build_symbol_report
+from app.domain.events import EventEvidence
+from app.services.report import _events_for_current_attribution, build_symbol_report
 
 
 class FakeMarketData:
@@ -58,3 +59,30 @@ def test_report_rejects_invalid_ohlcv_chart_data() -> None:
 
     with pytest.raises(ValueError, match="chart bars require finite OHLCV values"):
         build_symbol_report("MU", market_data=FakeMarketData(bars), ai_client=NoAI())
+
+
+def test_current_attribution_excludes_evidence_older_than_seven_days() -> None:
+    older_event = EventEvidence(
+        kind="fomc",
+        occurred_on="2024-01-31",
+        title="FOMC statement",
+        url="https://www.federalreserve.gov/example",
+        proximity=1.0,
+        repeatability=1.0,
+        peer_confirmation=1.0,
+    )
+    current_event = EventEvidence(
+        kind="earnings",
+        occurred_on="2026-07-14",
+        title="Earnings release",
+        url="https://example.com/earnings",
+        proximity=1.0,
+        repeatability=1.0,
+        peer_confirmation=1.0,
+    )
+
+    result = _events_for_current_attribution(
+        [older_event, current_event], latest_bar_date=date(2026, 7, 16)
+    )
+
+    assert result == [current_event]

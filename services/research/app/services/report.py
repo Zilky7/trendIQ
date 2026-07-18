@@ -24,6 +24,7 @@ DISCLAIMER = "仅供研究参考，不构成投资建议"
 MODEL_VERSION = "research-v1"
 _SYMBOL = re.compile(r"^[A-Z0-9.-]{1,10}$")
 _CHART_BAR_LIMIT = 260
+_ATTRIBUTION_WINDOW_DAYS = 7
 
 
 def validate_symbol(symbol: str) -> str:
@@ -54,7 +55,10 @@ def build_symbol_report(
     chart_bars = _build_chart_bars(bars_result.bars)
     coverages = _event_coverages(start, end)
     attributions = score_attributions(
-        [event for coverage in coverages for event in coverage.events]
+        _events_for_current_attribution(
+            [event for coverage in coverages for event in coverage.events],
+            latest_bar_date=bars_result.bars.index[-1].date(),
+        )
     )
     rules_report = _rules_report(
         normalized_symbol,
@@ -73,6 +77,22 @@ def _event_coverages(start: str, end: str) -> tuple[EventCoverage, ...]:
         EarningsSecEventProvider().events_between(start, end),
         MacroEventProvider().events_between(start, end),
     )
+
+
+def _events_for_current_attribution(
+    events: list[Any], *, latest_bar_date: date
+) -> list[Any]:
+    """Use only timestamped events close enough to the latest displayed move.
+
+    Historical catalog entries remain visible as coverage metadata, but cannot
+    be presented as a cause of a current price move outside this window.
+    """
+    earliest_date = latest_bar_date - timedelta(days=_ATTRIBUTION_WINDOW_DAYS)
+    return [
+        event
+        for event in events
+        if earliest_date <= date.fromisoformat(event.occurred_on) <= latest_bar_date
+    ]
 
 
 def _rules_report(
